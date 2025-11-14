@@ -180,36 +180,40 @@ jobs:
 
 
 
+
   # ======================================================
 
 
-  semgrep-scan:
-    name: Semgrep Scans
+  collect-sarif-results: # Use github/codeql-action/upload-sarif action instead (when either public repo or CodeQL enabled in enterprise commercial repo)
+    name: Collect Results
     runs-on: ubuntu-latest
-    container:
-      # Official Docker image with Semgrep installed
-      image: returntocorp/semgrep@sha256:8f85dbfb5d38592d0b916caac855cf18facba40674988caf763d52b9fe916694
-    permissions:
-      # required for all workflows
-      security-events: write
-      # only required for workflows in private repositories
-      actions: read
-      contents: read
-
+    needs:
+      - sast-scans
+      - semgrep-scan
 
     steps:
 
-      - name: Checkout Sources
-        uses: actions/checkout@v4
+      - name: Download all SARIF artifacts
+        uses: actions/download-artifact@v4
         with:
-          persist-credentials: false
+          path: sarif-input
 
-      - name: Run Semgrep using selected rules (metrics off)
+      - name: List downloaded SARIFs
+        if: false # Just used for debugging
         run: |
-          semgrep scan --sarif --config auto . --output /tmp/semgrep-results.sarif || true
+          pwd
+          find sarif-input -type f
 
-      - name: Upload Semgrep SARIF Results
+      - name: Install sarif-tools and convert SARIF to HTML
+        run: | # Bonus idea: use "sarif trend" or "sarif diff" to compare results
+          pip install sarif-tools
+          sarif summary sarif-input
+          sarif html -o /tmp/summary.html sarif-input
+
+      - name: Upload SARIF HTML Report
         uses: actions/upload-artifact@v4
-        with: # Yep, you can open this file in your IDE: Just drag and drop it into IntelliJ IDEA or Visual Studio Code
-          name: semgrep-scan-results.sarif
-          path: /tmp/semgrep-results.sarif
+        with:
+          name: summary.html
+          path: /tmp/summary.html
+
+
